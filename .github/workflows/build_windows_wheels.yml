@@ -43,14 +43,14 @@ jobs:
           choco install nasm -y
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Create Perl64 directory
-        run: |
-          # Assuming Strawberry Perl is at C:\Strawberry
-          if (-not (Test-Path "C:\Perl64")) {
-            Copy-Item -Path "C:\Strawberry" -Destination "C:\Perl64" -Recurse -Force
-          }
-          echo "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "C:\Strawberry\c\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      #- name: Create Perl64 directory
+      #  run: |
+      #    # Assuming Strawberry Perl is at C:\Strawberry
+      #    if (-not (Test-Path "C:\Perl64")) {
+      #      Copy-Item -Path "C:\Strawberry" -Destination "C:\Perl64" -Recurse -Force
+      #    }
+      #    echo "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      #    echo "C:\Strawberry\c\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install 7-Zip
         run: |
