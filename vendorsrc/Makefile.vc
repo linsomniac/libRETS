@@ -114,8 +114,8 @@ expat: prepare expat-build expat-install
 
 expat-build::
 		cd $(BASEDIR)\expat\current\expat
-		$(MSBUILD) expat.sln /t:expat;expat_static /p:Configuration=Release /p:Platform="Any CPU"
 		$(MSBUILD) expat.sln /t:expat;expat_static /p:Configuration=Debug /p:Platform="Any CPU"
+		#@@@ $(MSBUILD) expat.sln /t:expat;expat_static /p:Configuration=Debug /p:Platform="Any CPU"
 
 expat-install::
 		cd $(BASEDIR)\expat\current\expat
