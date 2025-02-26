@@ -40,23 +40,19 @@ jobs:
 
       - name: Setup NASM
         run: |
-          $url = "https://www.nasm.us/pub/nasm/releasebuilds/2.15.05/win64/nasm-2.15.05-win64.zip"
-          $output = "nasm.zip"
-          Invoke-WebRequest -Uri $url -OutFile $output
-          Expand-Archive -Path $output -DestinationPath C:\
-          Rename-Item -Path "C:\nasm-2.15.05" -NewName "C:\NASM"
-          echo "C:\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          choco install nasm -y
+          echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Setup Strawberry Perl (64-bit)
-        if: matrix.architecture == 'x64'
+      - name: Setup Strawberry Perl
         run: |
-          $url = "https://strawberryperl.com/download/5.32.1.1/strawberry-perl-5.32.1.1-64bit.msi"
-          $output = "perl.msi"
-          Invoke-WebRequest -Uri $url -OutFile $output
-          Start-Process msiexec.exe -Wait -ArgumentList "/i $output /quiet /qn /norestart"
+          choco install strawberryperl -y
+          if ('${{ matrix.architecture }}' -eq 'x64') {
+            Copy-Item -Path "C:\Strawberry" -Destination "C:\Perl64" -Recurse -Force
+          } else {
+            Copy-Item -Path "C:\Strawberry" -Destination "C:\Perl" -Recurse -Force
+          }
           echo "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "C:\Strawberry\c\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          Rename-Item -Path "C:\Strawberry" -NewName "C:\Perl64"
 
       - name: Install 7-Zip
         run: |
