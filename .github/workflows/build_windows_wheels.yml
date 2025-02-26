@@ -76,6 +76,22 @@ jobs:
             exit 1
           }
 
+      - name: Install Cygwin
+        run: |
+          # Download Cygwin installer
+          Invoke-WebRequest -Uri "https://cygwin.com/setup-x86_64.exe" -OutFile "C:\cygwin-setup.exe"
+          
+          # Install Cygwin and required packages
+          Start-Process -FilePath "C:\cygwin-setup.exe" -ArgumentList "--quiet-mode --no-shortcuts --no-startmenu --no-desktop --only-site --root=C:\cygwin64 --site=http://cygwin.mirror.constant.com --packages=automake,binutils,bison,flex,libtool,make,gcc-core,bash" -Wait
+          
+          # Verify Cygwin installation
+          if (Test-Path "C:\cygwin64\bin\bash.exe") {
+            Write-Host "Cygwin successfully installed"
+          } else {
+            Write-Host "Failed to install Cygwin"
+            exit 1
+          }
+
       - name: Install 7-Zip
         run: |
           choco install 7zip -y
