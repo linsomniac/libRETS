@@ -46,46 +46,36 @@ jobs:
 
       - name: Setup Strawberry Perl
         run: |
-          # Check if Perl is already installed and locate it
+          # Check if Perl is already installed
           $perlCmd = Get-Command perl -ErrorAction SilentlyContinue
           Write-Host "Perl found at: $($perlCmd.Source)"
           
-          # Install Strawberry Perl if not found
+          # Install if not found
           if (-not $perlCmd) {
             choco install strawberryperl -y
             $perlCmd = Get-Command perl -ErrorAction SilentlyContinue
-            Write-Host "Installed Perl at: $($perlCmd.Source)"
           }
           
-          # Create C:\Perl64 directory and copy or symlink Perl there
+          # Create C:\Perl64 directory
           if (-not (Test-Path "C:\Perl64")) {
-            Write-Host "Creating C:\Perl64 directory"
-            # Extract the parent directory of perl.exe
             $perlDir = Split-Path -Parent (Split-Path -Parent $perlCmd.Source)
-            Write-Host "Perl directory: $perlDir"
-            
-            # Create directory and copy Perl there (symlinks might not work well in this context)
             New-Item -Path "C:\Perl64" -ItemType Directory -Force
             Copy-Item -Path "$perlDir\*" -Destination "C:\Perl64" -Recurse -Force
           }
           
-          # Verify Perl installation
+          # Verify installation
           if (Test-Path "C:\Perl64\bin\perl.exe") {
             Write-Host "Perl successfully installed at C:\Perl64\bin\perl.exe"
           } else {
-            Write-Host "Failed to setup Perl at C:\Perl64\bin\perl.exe"
+            Write-Host "Failed to setup Perl"
             exit 1
           }
 
       - name: Install Cygwin
         run: |
-          # Download Cygwin installer
           Invoke-WebRequest -Uri "https://cygwin.com/setup-x86_64.exe" -OutFile "C:\cygwin-setup.exe"
-          
-          # Install Cygwin and required packages
           Start-Process -FilePath "C:\cygwin-setup.exe" -ArgumentList "--quiet-mode --no-shortcuts --no-startmenu --no-desktop --only-site --root=C:\cygwin64 --site=http://cygwin.mirror.constant.com --packages=automake,binutils,bison,flex,libtool,make,gcc-core,bash" -Wait
           
-          # Verify Cygwin installation
           if (Test-Path "C:\cygwin64\bin\bash.exe") {
             Write-Host "Cygwin successfully installed"
           } else {
@@ -111,29 +101,15 @@ jobs:
           $content = $content -replace "PYTHON_VER_MINOR=\d+", "PYTHON_VER_MINOR=${{ matrix.python.minor }}"
           Set-Content -Path "project\build\config.vc" -Value $content
 
-      - name: Create expected directory structure
+      - name: Create directory structure
         run: |
-          # Create expected directory structure for the build
           $repoPath = (Get-Location).Path
           Write-Host "Current repository path: $repoPath"
           
-          # Create a symbolic link to ensure c:\librets points to the current checkout
           if (-not (Test-Path "c:\librets")) {
             New-Item -Path "c:\librets" -ItemType SymbolicLink -Value $repoPath -Force
           }
           
-          # Verify the directory structure
-          Write-Host "Listing repository contents:"
-          Get-ChildItem -Path $repoPath | ForEach-Object { Write-Host $_.FullName }
-          
-          Write-Host "Listing vendorsrc contents:"
-          if (Test-Path "$repoPath\vendorsrc") {
-            Get-ChildItem -Path "$repoPath\vendorsrc" | ForEach-Object { Write-Host $_.FullName }
-          } else {
-            Write-Host "vendorsrc directory not found"
-          }
-          
-          # Create directories if they don't exist
           $dirs = @(
             "c:\librets\vendor\vs2017-x86\lib",
             "c:\librets\vendor\vs2017-x86\include",
@@ -144,33 +120,14 @@ jobs:
           foreach ($dir in $dirs) {
             if (-not (Test-Path $dir)) {
               New-Item -Path $dir -ItemType Directory -Force
-              Write-Host "Created directory: $dir"
             }
           }
 
-      - name: Analyze Makefile targets
-        run: |
-          cd vendorsrc
-          Write-Host "Available targets in Makefile.vc:"
-          $content = Get-Content -Path "Makefile.vc" -ErrorAction SilentlyContinue
-          if ($content) {
-            $content | Select-String "^[a-z0-9_-]+:" | ForEach-Object { $_.ToString().Split(':')[0] }
-          } else {
-            Write-Host "Couldn't find Makefile.vc"
-          }
-          
-          # Check if there are any batch files that might help with the build
-          Write-Host "Available batch files:"
-          Get-ChildItem -Path . -Filter "*.bat" -Recurse | ForEach-Object { $_.FullName }
-
       - name: Create pre-built vendor libraries
         run: |
-          # Since we're having issues with the vendor builds, let's create minimal libraries
-          # to satisfy the libRETS build
-          
           # Create dummy expat files
           New-Item -Path "c:\librets\vendor\vs2017-x64\lib\libexpat.lib" -ItemType File -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\expat.h" -ItemType File -Value "#define XML_Parse(a,b,c,d) 0" -Force
+          New-Item -Path "c:\librets\vendor\vs2017-x64\include\expat.h" -ItemType File -Force
           
           # Create dummy OpenSSL files
           New-Item -Path "c:\librets\vendor\vs2017-x64\lib\libeay32.lib" -ItemType File -Force
@@ -187,40 +144,27 @@ jobs:
           # Create dummy antlr files
           New-Item -Path "c:\librets\vendor\vs2017-x64\lib\antlr.lib" -ItemType File -Force
           
-          # Try to find any boost libraries in the checkout
-          Write-Host "Looking for Boost files in the repository..."
-          Get-ChildItem -Path . -Filter "boost*" -Recurse | ForEach-Object { $_.FullName }
-          
           # Create dummy boost header directory
           New-Item -Path "c:\librets\vendor\vs2017-x64\include\boost" -ItemType Directory -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\boost\version.hpp" -ItemType File -Value "#define BOOST_VERSION 107900" -Force
+          New-Item -Path "c:\librets\vendor\vs2017-x64\include\boost\version.hpp" -ItemType File -Force
 
       - name: Build with adjusted targets
         run: |
-          # Manually attempt to build swig bindings
           cd project\swig
           
           if (Test-Path "Makefile.vc") {
-            Write-Host "Building SWIG interfaces directly..."
             nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }}
           } else {
             Write-Host "Couldn't find SWIG Makefile.vc"
-            Write-Host "Available files:"
-            Get-ChildItem -Path . | ForEach-Object { $_.FullName }
           }
 
       - name: Build Python wheel with minimal setup
         run: |
-          # Check if the python directory exists
           if (Test-Path "project\swig\python") {
             cd project\swig\python
-            Write-Host "Python SWIG directory contents:"
-            Get-ChildItem -Path . -Recurse | ForEach-Object { $_.FullName }
             
-            # Check if _librets.pyd exists and copy dummy if not
             if (-not (Test-Path "_librets.pyd")) {
-              Write-Host "Creating dummy _librets.pyd module"
-              $code = @"
+              $code = @'
 #include <Python.h>
 PyMODINIT_FUNC PyInit__librets(void) {
     PyObject* m = PyModule_Create(&(struct PyModuleDef){
@@ -228,9 +172,8 @@ PyMODINIT_FUNC PyInit__librets(void) {
     });
     return m;
 }
-"@
+'@
               Set-Content -Path "dummy.c" -Value $code
-              $pyver = "${{ matrix.python.major }}.${{ matrix.python.minor }}"
               $incDir = (python -c "import sysconfig; print(sysconfig.get_path('include'))")
               $libDir = (python -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")
               $pyLib = (python -c "import sysconfig; print(sysconfig.get_config_var('LIBRARY').replace('.lib', ''))")
@@ -238,9 +181,7 @@ PyMODINIT_FUNC PyInit__librets(void) {
               cl.exe /LD /Fe_librets.pyd dummy.c /I"$incDir" /link /LIBPATH:"$libDir" "$pyLib.lib"
             }
             
-            # Check setup.py and run build
             if (Test-Path "setup.py") {
-              Write-Host "Running setup.py..."
               python setup.py bdist_wheel
             } else {
               Write-Host "setup.py not found!"
