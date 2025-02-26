@@ -16,10 +16,10 @@ jobs:
     strategy:
       matrix:
         python:
-          - {version: "3.8", major: 3, minor: 8}
-          - {version: "3.9", major: 3, minor: 9}
-          - {version: "3.10", major: 3, minor: 10}
-          - {version: "3.11", major: 3, minor: 11}
+          #- {version: "3.8", major: 3, minor: 8}
+          #- {version: "3.9", major: 3, minor: 9}
+          #- {version: "3.10", major: 3, minor: 10}
+          #- {version: "3.11", major: 3, minor: 11}
           - {version: "3.12", major: 3, minor: 12}
         architecture: [x64]  # Removed x86, only building for x64
 
@@ -46,36 +46,46 @@ jobs:
 
       - name: Setup Strawberry Perl
         run: |
-          # Check if Perl is already installed
+          # Check if Perl is already installed and locate it
           $perlCmd = Get-Command perl -ErrorAction SilentlyContinue
           Write-Host "Perl found at: $($perlCmd.Source)"
           
-          # Install if not found
+          # Install Strawberry Perl if not found
           if (-not $perlCmd) {
             choco install strawberryperl -y
             $perlCmd = Get-Command perl -ErrorAction SilentlyContinue
+            Write-Host "Installed Perl at: $($perlCmd.Source)"
           }
           
-          # Create C:\Perl64 directory
+          # Create C:\Perl64 directory and copy or symlink Perl there
           if (-not (Test-Path "C:\Perl64")) {
+            Write-Host "Creating C:\Perl64 directory"
+            # Extract the parent directory of perl.exe
             $perlDir = Split-Path -Parent (Split-Path -Parent $perlCmd.Source)
+            Write-Host "Perl directory: $perlDir"
+            
+            # Create directory and copy Perl there (symlinks might not work well in this context)
             New-Item -Path "C:\Perl64" -ItemType Directory -Force
             Copy-Item -Path "$perlDir\*" -Destination "C:\Perl64" -Recurse -Force
           }
           
-          # Verify installation
+          # Verify Perl installation
           if (Test-Path "C:\Perl64\bin\perl.exe") {
             Write-Host "Perl successfully installed at C:\Perl64\bin\perl.exe"
           } else {
-            Write-Host "Failed to setup Perl"
+            Write-Host "Failed to setup Perl at C:\Perl64\bin\perl.exe"
             exit 1
           }
 
       - name: Install Cygwin
         run: |
+          # Download Cygwin installer
           Invoke-WebRequest -Uri "https://cygwin.com/setup-x86_64.exe" -OutFile "C:\cygwin-setup.exe"
+          
+          # Install Cygwin and required packages
           Start-Process -FilePath "C:\cygwin-setup.exe" -ArgumentList "--quiet-mode --no-shortcuts --no-startmenu --no-desktop --only-site --root=C:\cygwin64 --site=http://cygwin.mirror.constant.com --packages=automake,binutils,bison,flex,libtool,make,gcc-core,bash" -Wait
           
+          # Verify Cygwin installation
           if (Test-Path "C:\cygwin64\bin\bash.exe") {
             Write-Host "Cygwin successfully installed"
           } else {
@@ -101,95 +111,33 @@ jobs:
           $content = $content -replace "PYTHON_VER_MINOR=\d+", "PYTHON_VER_MINOR=${{ matrix.python.minor }}"
           Set-Content -Path "project\build\config.vc" -Value $content
 
-      - name: Create directory structure
+      - name: Create expected directory structure
         run: |
+          # Create expected directory structure for the build
           $repoPath = (Get-Location).Path
           Write-Host "Current repository path: $repoPath"
           
+          # Create a symbolic link to ensure c:\librets points to the current checkout
           if (-not (Test-Path "c:\librets")) {
             New-Item -Path "c:\librets" -ItemType SymbolicLink -Value $repoPath -Force
           }
-          
-          $dirs = @(
-            "c:\librets\vendor\vs2017-x86\lib",
-            "c:\librets\vendor\vs2017-x86\include",
-            "c:\librets\vendor\vs2017-x64\lib",
-            "c:\librets\vendor\vs2017-x64\include"
-          )
-          
-          foreach ($dir in $dirs) {
-            if (-not (Test-Path $dir)) {
-              New-Item -Path $dir -ItemType Directory -Force
-            }
-          }
 
-      - name: Create pre-built vendor libraries
+      - name: Build vendor dependencies
         run: |
-          # Create dummy expat files
-          New-Item -Path "c:\librets\vendor\vs2017-x64\lib\libexpat.lib" -ItemType File -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\expat.h" -ItemType File -Force
-          
-          # Create dummy OpenSSL files
-          New-Item -Path "c:\librets\vendor\vs2017-x64\lib\libeay32.lib" -ItemType File -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\lib\ssleay32.lib" -ItemType File -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\openssl" -ItemType Directory -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\openssl\ssl.h" -ItemType File -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\openssl\crypto.h" -ItemType File -Force
-          
-          # Create dummy curl files
-          New-Item -Path "c:\librets\vendor\vs2017-x64\lib\libcurl.lib" -ItemType File -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\curl" -ItemType Directory -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\curl\curl.h" -ItemType File -Force
-          
-          # Create dummy antlr files
-          New-Item -Path "c:\librets\vendor\vs2017-x64\lib\antlr.lib" -ItemType File -Force
-          
-          # Create dummy boost header directory
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\boost" -ItemType Directory -Force
-          New-Item -Path "c:\librets\vendor\vs2017-x64\include\boost\version.hpp" -ItemType File -Force
+          cd vendorsrc
+          powershell -ExecutionPolicy Bypass -File vendor.ps1
+          nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} build-all
 
-      - name: Build with adjusted targets
+      - name: Build libRETS
+        timeout-minutes: 45
         run: |
-          cd project\swig
-          
-          if (Test-Path "Makefile.vc") {
-            nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }}
-          } else {
-            Write-Host "Couldn't find SWIG Makefile.vc"
-          }
+          nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} all
+          nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} swig
 
-      - name: Build Python wheel with minimal setup
+      - name: Build Python wheel
         run: |
-          if (Test-Path "project\swig\python") {
-            cd project\swig\python
-            
-            if (-not (Test-Path "_librets.pyd")) {
-              $code = @'
-#include <Python.h>
-PyMODINIT_FUNC PyInit__librets(void) {
-    PyObject* m = PyModule_Create(&(struct PyModuleDef){
-        PyModuleDef_HEAD_INIT, "_librets", NULL, -1, NULL
-    });
-    return m;
-}
-'@
-              Set-Content -Path "dummy.c" -Value $code
-              $incDir = (python -c "import sysconfig; print(sysconfig.get_path('include'))")
-              $libDir = (python -c "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))")
-              $pyLib = (python -c "import sysconfig; print(sysconfig.get_config_var('LIBRARY').replace('.lib', ''))")
-              
-              cl.exe /LD /Fe_librets.pyd dummy.c /I"$incDir" /link /LIBPATH:"$libDir" "$pyLib.lib"
-            }
-            
-            if (Test-Path "setup.py") {
-              python setup.py bdist_wheel
-            } else {
-              Write-Host "setup.py not found!"
-            }
-          } else {
-            Write-Host "Python SWIG directory not found"
-            exit 1
-          }
+          cd project\swig\python
+          python setup.py bdist_wheel
 
       - name: Upload wheel
         uses: actions/upload-artifact@v4
@@ -197,7 +145,6 @@ PyMODINIT_FUNC PyInit__librets(void) {
           name: librets-py${{ matrix.python.version }}-${{ matrix.architecture }}-wheel
           path: project\swig\python\dist\*.whl
           retention-days: 7
-        continue-on-error: true
 
   release-wheels:
     name: Release wheels to PyPI
