@@ -14,7 +14,7 @@ jobs:
     runs-on: windows-2019  # Using 2019 for VS 2017 compatibility
     strategy:
       matrix:
-        python-version:
+        python:
           - {version: "3.8", major: 3, minor: 8}
           - {version: "3.9", major: 3, minor: 9}
           - {version: "3.10", major: 3, minor: 10}
@@ -57,6 +57,12 @@ jobs:
       - name: Install 7-Zip
         run: |
           choco install 7zip -y
+
+      - name: Setup Visual Studio Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.architecture }}
+          toolset: 14.16  # Visual Studio 2017 (v141)
 
       - name: Prepare config.vc
         run: |
