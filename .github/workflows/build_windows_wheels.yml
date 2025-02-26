@@ -14,7 +14,12 @@ jobs:
     runs-on: windows-2019  # Using 2019 for VS 2017 compatibility
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version:
+          - {version: "3.8", major: 3, minor: 8}
+          - {version: "3.9", major: 3, minor: 9}
+          - {version: "3.10", major: 3, minor: 10}
+          - {version: "3.11", major: 3, minor: 11}
+          - {version: "3.12", major: 3, minor: 12}
         architecture: [x64]
 
     steps:
@@ -25,7 +30,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python.version }}
           architecture: ${{ matrix.architecture }}
 
       - name: Install Python dependencies
@@ -43,6 +48,7 @@ jobs:
           echo "C:\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Setup Strawberry Perl (64-bit)
+        if: matrix.architecture == 'x64'
         run: |
           $url = "https://strawberryperl.com/download/5.32.1.1/strawberry-perl-5.32.1.1-64bit.msi"
           $output = "perl.msi"
@@ -60,8 +66,8 @@ jobs:
         run: |
           Copy-Item -Path "project\build\config.vc.dist" -Destination "project\build\config.vc"
           $content = Get-Content -Path "project\build\config.vc"
-          $content = $content -replace "PYTHON_VER_MAJOR=\d+", "PYTHON_VER_MAJOR=${{ matrix.python-version.split('.')[0] }}"
-          $content = $content -replace "PYTHON_VER_MINOR=\d+", "PYTHON_VER_MINOR=${{ matrix.python-version.split('.')[1] }}"
+          $content = $content -replace "PYTHON_VER_MAJOR=\d+", "PYTHON_VER_MAJOR=${{ matrix.python.major }}"
+          $content = $content -replace "PYTHON_VER_MINOR=\d+", "PYTHON_VER_MINOR=${{ matrix.python.minor }}"
           Set-Content -Path "project\build\config.vc" -Value $content
 
       - name: Build vendor dependencies
@@ -89,7 +95,7 @@ jobs:
       - name: Upload wheel
         uses: actions/upload-artifact@v4
         with:
-          name: librets-py${{ matrix.python-version }}-${{ matrix.architecture }}-wheel
+          name: librets-py${{ matrix.python.version }}-${{ matrix.architecture }}-wheel
           path: project\swig\python\dist\*.whl
           retention-days: 7
 
