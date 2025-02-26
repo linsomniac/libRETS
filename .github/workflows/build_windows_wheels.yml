@@ -122,106 +122,17 @@ jobs:
             New-Item -Path "c:\librets" -ItemType SymbolicLink -Value $repoPath -Force
           }
 
-      # Split vendor builds into separate steps to prevent timeouts
-      - name: Prepare vendor dependencies
+      - name: Build vendor dependencies
         run: |
           cd vendorsrc
           powershell -ExecutionPolicy Bypass -File vendor.ps1
+          nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} build-all
 
-      - name: Build vendor - OpenSSL
-        timeout-minutes: 15
+      - name: Build libRETS
+        timeout-minutes: 45
         run: |
-          cd vendorsrc
-          echo "Building OpenSSL..."
-          nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} build-openssl
-          echo "OpenSSL build completed."
-
-      - name: Build vendor - CURL
-        timeout-minutes: 15
-        run: |
-          cd vendorsrc
-          echo "Building CURL..."
-          nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} build-curl
-          echo "CURL build completed."
-
-      - name: Build vendor - Expat
-        timeout-minutes: 10
-        run: |
-          cd vendorsrc
-          echo "Building Expat..."
-          nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} build-expat
-          echo "Expat build completed."
-
-      - name: Build vendor - Antlr with Progress Reporting
-        timeout-minutes: 15
-        run: |
-          cd vendorsrc
-          echo "Building Antlr..."
-          
-          # Create a background job to periodically output progress
-          $job = Start-Job -ScriptBlock {
-            $i = 0
-            while ($true) {
-              Write-Host "Antlr build still running... ($(Get-Date))"
-              Start-Sleep -Seconds 30
-              $i++
-              if ($i -gt 20) { break }  # Timeout after ~10 minutes
-            }
-          }
-          
-          # Run the build with nmake, capture errors if any
-          $errorOutput = $null
-          try {
-            nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} build-antlr
-          } catch {
-            $errorOutput = $_
-          }
-          
-          # Stop the background job
-          Stop-Job -Job $job
-          Remove-Job -Job $job -Force
-          
-          # If there was an error, report it
-          if ($errorOutput) {
-            Write-Host "Error during Antlr build: $errorOutput"
-            exit 1
-          }
-          
-          echo "Antlr build completed."
-
-      - name: Build vendor - Boost
-        timeout-minutes: 15
-        run: |
-          cd vendorsrc
-          echo "Building Boost..."
-          nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} build-boost
-          echo "Boost build completed."
-
-      - name: Build libRETS with timeout monitoring
-        timeout-minutes: 30
-        run: |
-          # Create a background job to periodically output progress
-          $job = Start-Job -ScriptBlock {
-            $i = 0
-            while ($true) {
-              Write-Host "libRETS build still running... ($(Get-Date))"
-              Start-Sleep -Seconds 30
-              $i++
-              if ($i -gt 40) { break }  # Timeout after ~20 minutes
-            }
-          }
-          
-          # Run the main build
-          echo "Building libRETS main..."
           nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} all
-          echo "Building libRETS SWIG bindings..."
           nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} swig
-          
-          # Stop the background job
-          Stop-Job -Job $job
-          Remove-Job -Job $job -Force
-          
-          echo "libRETS build completed."
 
       - name: Build Python wheel
         run: |
