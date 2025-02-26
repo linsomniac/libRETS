@@ -122,12 +122,19 @@ jobs:
             New-Item -Path "c:\librets" -ItemType SymbolicLink -Value $repoPath -Force
           }
 
+      # --- New Step: Patch vendor.ps1 ---
+      # This step modifies vendor.ps1 so that it skips the msbuild call that attempts to build an expat solution file.
+      - name: Patch vendor.ps1 to bypass expat msbuild
+        run: |
+          (Get-Content vendorsrc\vendor.ps1) | ForEach-Object { 
+            $_ -replace 'msbuild\s+expat\.sln\s+/t:expat;expat_static.*', 'Write-Host "Skipping expat msbuild step"'
+          } | Set-Content vendorsrc\vendor.ps1
+
       - name: Build vendor dependencies
         run: |
           cd vendorsrc
           powershell -ExecutionPolicy Bypass -File vendor.ps1
-          #@@@ nmake /f Makefile.vc TARGET_CPU=x64 build-all
-          nmake /f Makefile.vc TARGET_CPU="Any CPU" build-all
+          nmake /f Makefile.vc TARGET_CPU=x64 build-all
 
       - name: Build libRETS
         timeout-minutes: 45
