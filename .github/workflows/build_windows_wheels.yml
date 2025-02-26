@@ -43,14 +43,38 @@ jobs:
           choco install nasm -y
           echo "C:\Program Files\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      #- name: Create Perl64 directory
-      #  run: |
-      #    # Assuming Strawberry Perl is at C:\Strawberry
-      #    if (-not (Test-Path "C:\Perl64")) {
-      #      Copy-Item -Path "C:\Strawberry" -Destination "C:\Perl64" -Recurse -Force
-      #    }
-      #    echo "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-      #    echo "C:\Strawberry\c\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Setup Strawberry Perl
+        run: |
+          # Check if Perl is already installed and locate it
+          $perlCmd = Get-Command perl -ErrorAction SilentlyContinue
+          Write-Host "Perl found at: $($perlCmd.Source)"
+          
+          # Install Strawberry Perl if not found
+          if (-not $perlCmd) {
+            choco install strawberryperl -y
+            $perlCmd = Get-Command perl -ErrorAction SilentlyContinue
+            Write-Host "Installed Perl at: $($perlCmd.Source)"
+          }
+          
+          # Create C:\Perl64 directory and copy or symlink Perl there
+          if (-not (Test-Path "C:\Perl64")) {
+            Write-Host "Creating C:\Perl64 directory"
+            # Extract the parent directory of perl.exe
+            $perlDir = Split-Path -Parent (Split-Path -Parent $perlCmd.Source)
+            Write-Host "Perl directory: $perlDir"
+            
+            # Create directory and copy Perl there (symlinks might not work well in this context)
+            New-Item -Path "C:\Perl64" -ItemType Directory -Force
+            Copy-Item -Path "$perlDir\*" -Destination "C:\Perl64" -Recurse -Force
+          }
+          
+          # Verify Perl installation
+          if (Test-Path "C:\Perl64\bin\perl.exe") {
+            Write-Host "Perl successfully installed at C:\Perl64\bin\perl.exe"
+          } else {
+            Write-Host "Failed to setup Perl at C:\Perl64\bin\perl.exe"
+            exit 1
+          }
 
       - name: Install 7-Zip
         run: |
@@ -69,6 +93,17 @@ jobs:
           $content = $content -replace "PYTHON_VER_MAJOR=\d+", "PYTHON_VER_MAJOR=${{ matrix.python.major }}"
           $content = $content -replace "PYTHON_VER_MINOR=\d+", "PYTHON_VER_MINOR=${{ matrix.python.minor }}"
           Set-Content -Path "project\build\config.vc" -Value $content
+
+      - name: Create expected directory structure
+        run: |
+          # Create expected directory structure for the build
+          $repoPath = (Get-Location).Path
+          Write-Host "Current repository path: $repoPath"
+          
+          # Create a symbolic link to ensure c:\librets points to the current checkout
+          if (-not (Test-Path "c:\librets")) {
+            New-Item -Path "c:\librets" -ItemType SymbolicLink -Value $repoPath -Force
+          }
 
       - name: Build vendor dependencies
         run: |
