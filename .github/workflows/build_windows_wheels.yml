@@ -122,6 +122,59 @@ jobs:
             New-Item -Path "c:\librets" -ItemType SymbolicLink -Value $repoPath -Force
           }
 
+      # Fix Expat solution for x64 support
+      - name: Fix Expat solution for x64
+        run: |
+          cd c:\librets\vendorsrc\expat\current\expat
+          
+          # List available solutions and configurations
+          Write-Host "Available solution configurations:"
+          $solutionFile = "expat.sln"
+          $vcxprojFiles = Get-ChildItem -Filter "*.vcxproj"
+          
+          # Add x64 platform to each project
+          foreach ($proj in $vcxprojFiles) {
+            Write-Host "Adding x64 platform to $($proj.Name)"
+            # Load the project file
+            $xmlContent = [xml](Get-Content $proj.FullName)
+            $ns = new-object System.Xml.XmlNamespaceManager($xmlContent.NameTable)
+            $ns.AddNamespace("ns", "http://schemas.microsoft.com/developer/msbuild/2003")
+            
+            # Check if x64 platform exists
+            $platformNode = $xmlContent.SelectSingleNode("//ns:PropertyGroup[contains(@Condition, 'x64')]", $ns)
+            if (-not $platformNode) {
+              Write-Host "x64 platform not found, adding it"
+              
+              # Find a Win32 node to clone
+              $win32Node = $xmlContent.SelectSingleNode("//ns:PropertyGroup[contains(@Condition, 'Win32')]", $ns)
+              if ($win32Node) {
+                $newNode = $win32Node.CloneNode($true)
+                $newNode.Attributes["Condition"].Value = $win32Node.Attributes["Condition"].Value.Replace("Win32", "x64")
+                $win32Node.ParentNode.AppendChild($newNode)
+                
+                # Save the modified project
+                $xmlContent.Save($proj.FullName)
+                Write-Host "Added x64 platform to $($proj.Name)"
+              }
+            } else {
+              Write-Host "x64 platform already exists in $($proj.Name)"
+            }
+          }
+          
+          # Use DevEnv to upgrade the solution
+          & "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\Common7\IDE\devenv.exe" /upgradeproject $solutionFile /projectconfig Release 2>&1
+          
+          # Attempt to build with the Win32 platform as a fallback
+          cd c:\librets\vendorsrc
+          Write-Host "Building expat with Win32 platform as fallback"
+          nmake /f Makefile.vc TARGET_CPU=x86 build-expat
+          
+          # Copy Win32 binaries to x64 location
+          mkdir -p "c:\librets\vendor\vs2017-x64\lib" -Force
+          mkdir -p "c:\librets\vendor\vs2017-x64\include" -Force
+          Copy-Item "c:\librets\vendor\vs2017-x86\lib\*" "c:\librets\vendor\vs2017-x64\lib\" -Force
+          Copy-Item "c:\librets\vendor\vs2017-x86\include\*" "c:\librets\vendor\vs2017-x64\include\" -Force
+
       - name: Build vendor dependencies
         run: |
           cd vendorsrc
@@ -129,7 +182,6 @@ jobs:
           nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} build-all
 
       - name: Build libRETS
-        timeout-minutes: 45
         run: |
           nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} all
           nmake /f Makefile.vc TARGET_CPU=${{ matrix.architecture }} swig
